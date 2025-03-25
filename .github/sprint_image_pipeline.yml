@@ -1,0 +1,24 @@
+name: Docker image pipeline for the sprint
+
+run-name: Pipeline triggered by @${{ github.actor }} for branch ${{ github.ref_name }
+
+on:
+  push:
+    tags:
+      - 'sprint-*'
+
+jobs:
+  build-and-push-docker-image:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Build Docker image
+        run: docker build -t sprint-image .
+
+      - name: Login to Docker Hub
+        run: echo "${{ secrets.DOCKER_HUB_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_HUB_USERNAME }}" --password-stdin
+
+      - name: Push Docker image
+        run: docker tag sprint-image "${{ secrets.DOCKER_HUB_USERNAME }}/sprint-image:${{ github.ref_name }}" && docker push "${{ secrets.DOCKER_HUB_USERNAME }}/sprint-image:${{ github.ref_name }}"
