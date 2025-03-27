@@ -1,6 +1,6 @@
 name: QA Production Pipeline
 
-run-name: Deploy triggered by @${{ github.actor }} for branch ${{ github.ref_name }
+run-name: Deploy triggered by @${{ github.actor }} for branch ${{ github.ref_name }}
 
 on:
   pull-request:

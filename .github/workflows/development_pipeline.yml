@@ -1,0 +1,54 @@
+name: QA Dev Pipeline
+
+run-name: Dev pipeline triggered by @${{ github.actor }} for branch ${{ github.ref_name }}
+
+on:
+  pull-request:
+    branches:
+      - development
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+
+        env:
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          DATABASE_URL: postgres://${{ secrets.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.POSTGRES_DB }}
+        ports:
+          5432:5432
+        options:
+          --health-cmd="pg_isready -U test_user"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+        steps:
+          - name: Checkout code
+            uses: actions/checkout@v3
+
+          - name: Fetch Tags
+            run: git fetch --tags
+          
+          - name: Get Latest Tag
+            run: echo "TAG=$(git describe --tags --abbrev=0)" >> $GITHUB_ENV
+
+          - name: Login to Docker Hub
+            run: echo "${{ secrets.DOCKER_HUB_PASSWORD }}" | docker login - "${{ secrets.DOCKER_HUB_USERNAME }}" --password-stdin
+
+          - name: Pull Sprint Image
+            run: docker pull "${{ secrets.DOCKER_HUB_USERNAME}}/sprint-image:{{ $env.TAG }}"
+          
+          - name: Run Unit Tests
+            run: |
+              docker run --rm \
+              --network: host \
+              -e NODE_ENV=development \
+              -e DATABASE_URL="postgres://${{ secrets.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD}}@localhost:5432/${{ secrets.POSTGRES_DB}}" \
+              "${{ secrets.DOCKER_HUB_USERNAME }}/sprint-image:{{ env.TAG }}" \
+              npm run test
