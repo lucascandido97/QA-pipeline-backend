@@ -10,24 +10,7 @@ on:
 jobs:
   unit-tests:
     runs-on: ubuntu-latest
-
-    services:
-      postgres:
-        image: postgres:15
-
-        env:
-          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
-          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
-          DATABASE_URL: postgres://${{ secrets.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.POSTGRES_DB }}
-        ports:
-          5432:5432
-        options:
-          --health-cmd="pg_isready -U test_user"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
-
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -38,6 +21,19 @@ jobs:
       - name: Get Latest Tag
         run: echo "TAG=$(git describe --tags --abbrev=0)" >> $GITHUB_ENV
 
+      - name: Create Docker Network
+        run: docker network create backend-network
+
+      - name: Start PostgreSQL Container
+        run: |
+          docker run -d \
+            --name postgres \
+            --network backend-network \
+            -e POSTGRES_USER=${{ secrets.POSTGRES_USER }} \
+            -e POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }} \
+            -e POSTGRES_DB=${{ secrets.POSTGRES_DB}} \
+            postgres:15
+        
       - name: Login to Docker Hub
         run: echo "${{ secrets.DOCKER_HUB_PASSWORD }}" | docker login - "${{ secrets.DOCKER_HUB_USERNAME }}" --password-stdin
 
@@ -47,8 +43,8 @@ jobs:
       - name: Run Unit Tests
         run: |
           docker run --rm \
-          --network: host \
+          --network: backend-network \
           -e NODE_ENV=development \
-          -e DATABASE_URL="postgres://${{ secrets.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD}}@localhost:5432/${{ secrets.POSTGRES_DB}}" \
+          -e DATABASE_URL="postgres://${{ secrets.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD}}@postgres:5432/${{ secrets.POSTGRES_DB}}" \
           "${{ secrets.DOCKER_HUB_USERNAME }}/sprint-image:{{ env.TAG }}" \
           npm run test

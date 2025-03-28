@@ -1,74 +1,89 @@
 import request from 'supertest';
-import app from '../../../src/app'; // Certifique-se de que o caminho para o app está correto
-import { setupTestDatabase, teardownTestDatabase } from '../../utils/testDatabase'; // Funções utilitárias para configurar o banco de dados de teste
+import app from '../../main';
 
-describe('Auth Controller Integration Tests', () => {
-  beforeAll(async () => {
-    await setupTestDatabase(); // Configura o banco de dados de teste
+describe('Auth Controller - Integration Tests', () => {
+  describe('POST /users - Create User', () => {
+    it('should create a user (Smoke Test)', async () => {
+      const response = await request(app).post('/api/users').send({
+        user: { email: 'test@example.com', username: 'testUsername', password: 'password123' },
+      });
+
+      expect(response.status).toBe(201);
+      expect(response.body.user).toHaveProperty('email', 'test@example.com');
+      expect(response.body.user).toHaveProperty('token');
+    });
+
+    it('should return 400 if email is missing (Regression Test - High Priority)', async () => {
+      const response = await request(app).post('/api/users').send({
+        user: { password: 'password123' },
+      });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error', 'Email is required');
+    });
+
+    it('should return 409 if user already exists (Regression Test - Medium Priority)', async () => {
+      await request(app).post('/api/users').send({
+        user: { email: 'duplicate@example.com', password: 'password123' },
+      });
+
+      const response = await request(app).post('/api/users').send({
+        user: { email: 'duplicate@example.com', password: 'password123' },
+      });
+
+      expect(response.status).toBe(409);
+      expect(response.body).toHaveProperty('error', 'User already exists');
+    });
   });
 
-  afterAll(async () => {
-    await teardownTestDatabase(); // Limpa o banco de dados após os testes
-  });
-
-  describe('POST /users/login', () => {
-    it('should log in a user and return the user object', async () => {
-      // Pré-criação de um usuário no banco de dados
-      const testUser = {
-        email: 'test@example.com',
-        password: 'password123',
-      };
-      await request(app).post('/users').send({ user: testUser });
-
-      // Testa o login
-      const response = await request(app)
-        .post('/users/login')
-        .send({ user: testUser });
+  describe('POST /users/login - Login', () => {
+    it('should log in a user (Smoke Test)', async () => {
+      const response = await request(app).post('/api/users/login').send({
+        user: { email: 'test@example.com', password: 'password123' },
+      });
 
       expect(response.status).toBe(200);
-      expect(response.body).toHaveProperty('user');
-      expect(response.body.user).toHaveProperty('email', testUser.email);
-      expect(response.body.user).toHaveProperty('token'); // Certifique-se de que o token é retornado
+      expect(response.body.user).toHaveProperty('email', 'test@example.com');
+      expect(response.body.user).toHaveProperty('token');
     });
 
-    it('should return 401 for invalid credentials', async () => {
-      const response = await request(app)
-        .post('/users/login')
-        .send({ user: { email: 'invalid@example.com', password: 'wrongpassword' } });
+    it('should return 401 for invalid credentials (Sanity Test)', async () => {
+      const response = await request(app).post('/api/users/login').send({
+        user: { email: 'invalid@example.com', password: 'wrongpassword' },
+      });
 
       expect(response.status).toBe(401);
-      expect(response.body).toHaveProperty('error');
+      expect(response.body).toHaveProperty('error', 'Invalid credentials');
+    });
+
+    it('should return 400 if email is missing (Regression Test - High Priority)', async () => {
+      const response = await request(app).post('/api/users/login').send({
+        user: { password: 'password123' },
+      });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error', 'Email is required');
     });
   });
 
-  describe('GET /user', () => {
-    it('should return the current user when authenticated', async () => {
-      // Pré-criação de um usuário e obtenção do token
-      const testUser = {
-        email: 'test@example.com',
-        password: 'password123',
-      };
-      const loginResponse = await request(app)
-        .post('/users/login')
-        .send({ user: testUser });
+  describe('GET /user - Get Current User', () => {
+    it('should return the current user when authenticated (Smoke Test)', async () => {
+      const loginResponse = await request(app).post('/api/users/login').send({
+        user: { email: 'test@example.com', password: 'password123' },
+      });
 
       const token = loginResponse.body.user.token;
 
-      // Testa a rota GET /user
-      const response = await request(app)
-        .get('/user')
-        .set('Authorization', `Bearer ${token}`);
+      const response = await request(app).get('/api/user').set('Authorization', `Bearer ${token}`);
 
       expect(response.status).toBe(200);
-      expect(response.body).toHaveProperty('user');
-      expect(response.body.user).toHaveProperty('email', testUser.email);
+      expect(response.body.user).toHaveProperty('email', 'test@example.com');
     });
 
-    it('should return 401 if no token is provided', async () => {
-      const response = await request(app).get('/user');
+    it('should return 401 when not authenticated (Sanity Test)', async () => {
+      const response = await request(app).get('/api/user');
 
       expect(response.status).toBe(401);
-      expect(response.body).toHaveProperty('error');
     });
   });
 });
